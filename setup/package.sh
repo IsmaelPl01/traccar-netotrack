@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-#
-# Script to create installers for various platforms.
-#
+export JAVA_HOME=/usr/lib/jvm/jdk-21.0.4+7
+export PATH=$JAVA_HOME/bin:$PATH
 
 cd $(dirname $0)
 
@@ -68,7 +67,7 @@ if [ $PLATFORM = "all" -o $PLATFORM = "linux-64" -o $PLATFORM = "linux-arm" ]; t
   check_requirement "Makeself" "which makeself" "Missing makeself binary"
 fi
 if [ $PLATFORM = "all" -o $PLATFORM = "linux-64" ]; then
-  check_requirement "Linux 64 Java" "ls OpenJDK*x64_linux*.tar.gz" "Missing Linux 64 JDK (https://adoptium.net/)"
+  check_requirement "Linux 64 Java" "[ -d $JAVA_HOME ]" "Missing Linux 64 JDK (https://adoptium.net/)"
 fi
 if [ $PLATFORM = "all" -o $PLATFORM = "linux-arm" ]; then
   check_requirement "Linux ARM Java" "ls OpenJDK*aarch64_linux*.tar.gz" "Missing Linux ARM JDK (https://adoptium.net/)"
@@ -128,21 +127,42 @@ package_windows () {
 }
 
 package_linux () {
+  mkdir -p out/{conf,data,lib,logs,web,schema,templates}
+
+  cp ../target/tracker-server.jar out
+  cp ../target/lib/* out/lib
+  cp ../schema/* out/schema
+  cp -r ../templates/* out/templates
+  cp -r ../traccar-web/build/* out/web
+  cp traccar.xml out/conf
   cp setup.sh out
   cp traccar.service out
 
-  tar -xf OpenJDK*$2_linux*.tar.gz
-  jlink --module-path jdk-*/jmods --add-modules java.se,jdk.charsets,jdk.crypto.ec,jdk.unsupported --output out/jre
-  rm -rf jdk-*
-  makeself --needroot --quiet --notemp out traccar.run "traccar" ./setup.sh
-  rm -rf out/jre
+  # Asegurarse de que setup.sh tenga permisos de ejecución
+  chmod +x out/setup.sh
 
+  # Crear el directorio jre si no existe
+  mkdir -p out/jre
+
+  # Copiar el JDK al directorio out/jre
+  cp -r $JAVA_HOME/* out/jre
+
+  # Crear un JRE mínimo usando jlink
+  jlink --module-path out/jre/jmods --add-modules java.se,jdk.charsets,jdk.crypto.ec,jdk.unsupported --output out/jre
+
+  # Empaquetar todo en un archivo ejecutable usando makeself
+  makeself --needroot --quiet --notemp out traccar.run "traccar" /bin/bash ./setup.sh
+
+  # Crear un archivo zip del instalador
   zip -q -j traccar-linux-$1-$VERSION.zip traccar.run README.txt
 
+  # Limpieza de archivos temporales
+  rm -rf out/jre
   rm traccar.run
-  rm out/setup.sh
-  rm out/traccar.service
+  rm -r out
 }
+
+
 
 package_linux_64 () {
   info "Building Linux 64 installer"
