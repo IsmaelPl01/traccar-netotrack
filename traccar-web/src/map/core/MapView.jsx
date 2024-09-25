@@ -5,23 +5,37 @@ import maplibregl from 'maplibre-gl';
 import React, {
   useRef, useLayoutEffect, useEffect, useState,
 } from 'react';
+import MapContext from '../MapContext'; // Importa el contexto del mapa
 import { SwitcherControl } from '../switcher/switcher';
 import { useAttributePreference, usePreference } from '../../common/util/preferences';
 import usePersistedState, { savePersistedState } from '../../common/util/usePersistedState';
 import { mapImages } from './preloadImages';
 import useMapStyles from './useMapStyles';
 
+
+export let map = null; // Cambiamos 'const' a 'let' para poder asignarlo después
+
+// Inicialización global del contenedor del mapa
 const element = document.createElement('div');
 element.style.width = '100%';
 element.style.height = '100%';
 element.style.boxSizing = 'initial';
 
-maplibregl.setRTLTextPlugin(mapboxglRtlTextUrl);
+maplibregl.setRTLTextPlugin(mapboxglRtlTextUrl); // Configuración para texto RTL (derecha a izquierda)
 
-export const map = new maplibregl.Map({
-  container: element,
-  attributionControl: false,
-});
+export const mapReadyPromise = new Promise((resolve) => {
+  // Inicializamos el mapa
+  map = new maplibregl.Map({
+    container: element,
+    attributionControl: false,
+    // ... otras configuraciones ...
+  });
+
+    // Esperamos a que el mapa se cargue
+    map.on('load', () => {
+      resolve(map); // Resolvemos la promesa con el objeto 'map'
+    });
+  });
 
 let ready = false;
 const readyListeners = new Set();
@@ -52,6 +66,7 @@ const initMap = async () => {
   updateReadyValue(true);
 };
 
+// Añade controles de navegación al mapa
 map.addControl(new maplibregl.NavigationControl());
 
 const switcher = new SwitcherControl(
@@ -71,35 +86,40 @@ const switcher = new SwitcherControl(
   },
 );
 
+// Añade el control Switcher al mapa
 map.addControl(switcher);
 
 const MapView = ({ children }) => {
   const containerEl = useRef(null);
+  const [mapReady, setMapReady] = useState(false); // Estado para saber si el mapa está listo
 
-  const [mapReady, setMapReady] = useState(false);
-
+  // Preferencias y estilos para el mapa
   const mapStyles = useMapStyles();
   const activeMapStyles = useAttributePreference('activeMapStyles', 'locationIqStreets,osm,carto');
   const [defaultMapStyle] = usePersistedState('selectedMapStyle', usePreference('map', 'locationIqStreets'));
   const mapboxAccessToken = useAttributePreference('mapboxAccessToken');
   const maxZoom = useAttributePreference('web.maxZoom');
 
+  // Ajusta el zoom máximo del mapa según la preferencia
   useEffect(() => {
     if (maxZoom) {
       map.setMaxZoom(maxZoom);
     }
   }, [maxZoom]);
 
+  // Configura el token de Mapbox si es necesario
   useEffect(() => {
     maplibregl.accessToken = mapboxAccessToken;
   }, [mapboxAccessToken]);
 
+  // Actualiza los estilos del mapa
   useEffect(() => {
     const filteredStyles = mapStyles.filter((s) => s.available && activeMapStyles.includes(s.id));
     const styles = filteredStyles.length ? filteredStyles : mapStyles.filter((s) => s.id === 'osm');
     switcher.updateStyles(styles, defaultMapStyle);
   }, [mapStyles, defaultMapStyle]);
 
+  // Maneja los eventos para saber si el mapa está listo
   useEffect(() => {
     const listener = (ready) => setMapReady(ready);
     addReadyListener(listener);
@@ -108,19 +128,22 @@ const MapView = ({ children }) => {
     };
   }, []);
 
+  // Inserta el mapa en el contenedor cuando el componente se monta
   useLayoutEffect(() => {
     const currentEl = containerEl.current;
-    currentEl.appendChild(element);
-    map.resize();
+    currentEl.appendChild(element); // Añade el contenedor del mapa
+    map.resize(); // Asegura que el mapa se ajuste al contenedor
     return () => {
-      currentEl.removeChild(element);
+      currentEl.removeChild(element); // Limpia cuando el componente se desmonta
     };
   }, [containerEl]);
 
   return (
-    <div style={{ width: '100%', height: '100%' }} ref={containerEl}>
-      {mapReady && children}
-    </div>
+    <MapContext.Provider value={map}>
+      <div style={{ width: '100%', height: '100%' }} ref={containerEl}>
+        {mapReady && children} {/* Solo renderiza los children cuando el mapa esté listo */}
+      </div>
+    </MapContext.Provider>
   );
 };
 
