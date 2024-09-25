@@ -1,6 +1,4 @@
-import React, {
-  useState, useCallback, useEffect,
-} from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Paper } from '@mui/material';
 import { makeStyles } from '@mui/styles';
 import { useTheme } from '@mui/material/styles';
@@ -77,6 +75,7 @@ const MainPage = () => {
   const selectedPosition = filteredPositions.find((position) => selectedDeviceId && position.deviceId === selectedDeviceId);
 
   const [filteredDevices, setFilteredDevices] = useState([]);
+  const [map, setMap] = useState(null); // Estado para el objeto map
 
   const [keyword, setKeyword] = useState('');
   const [filter, setFilter] = usePersistedState('filter', {
@@ -106,6 +105,7 @@ const MainPage = () => {
           filteredPositions={filteredPositions}
           selectedPosition={selectedPosition}
           onEventsClick={onEventsClick}
+          setMap={setMap} // Pasar la función setMap para actualizar el objeto map
         />
       )}
       <div className={classes.sidebar}>
@@ -131,6 +131,7 @@ const MainPage = () => {
                 filteredPositions={filteredPositions}
                 selectedPosition={selectedPosition}
                 onEventsClick={onEventsClick}
+                setMap={setMap} // Pasar setMap en la vista móvil también
               />
             </div>
           )}
@@ -151,6 +152,7 @@ const MainPage = () => {
           position={selectedPosition}
           onClose={() => dispatch(devicesActions.selectId(null))}
           desktopPadding={theme.dimensions.drawerWidthDesktop}
+          map={map} // Pasar el objeto map a StatusCard
         />
       )}
     </div>
