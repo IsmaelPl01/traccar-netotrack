@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { mapReadyPromise } from '../../map/core/MapView'; // Ajusta la ruta según tu estructura
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import Draggable from 'react-draggable';
@@ -32,6 +33,8 @@ import usePositionAttributes from '../attributes/usePositionAttributes';
 import { devicesActions } from '../../store';
 import { useCatch, useCatchCallback } from '../../reactHelper';
 import { useAttributePreference } from '../util/preferences';
+import DirectionsIcon from '@mui/icons-material/Directions';
+import CalculateRouteModal from './CalculateRouteModal';
 
 const useStyles = makeStyles((theme) => ({
   card: {
@@ -99,7 +102,6 @@ const useStyles = makeStyles((theme) => ({
 
 const StatusRow = ({ name, content }) => {
   const classes = useStyles();
-
   return (
     <TableRow>
       <TableCell className={classes.cell}>
@@ -113,6 +115,16 @@ const StatusRow = ({ name, content }) => {
 };
 
 const StatusCard = ({ deviceId, position, onClose, disableActions, desktopPadding = 0 }) => {
+
+  const [map, setMap] = useState(null);
+
+  useEffect(() => {
+    // Esperamos a que el mapa esté listo
+    mapReadyPromise.then((mapInstance) => {
+      setMap(mapInstance);
+    });
+  }, []);
+
   const classes = useStyles({ desktopPadding });
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -125,13 +137,12 @@ const StatusCard = ({ deviceId, position, onClose, disableActions, desktopPaddin
   const device = useSelector((state) => state.devices.items[deviceId]);
 
   const deviceImage = device?.attributes?.deviceImage;
-
   const positionAttributes = usePositionAttributes(t);
   const positionItems = useAttributePreference('positionItems', 'fixTime,address,speed,totalDistance');
 
   const [anchorEl, setAnchorEl] = useState(null);
-
   const [removing, setRemoving] = useState(false);
+  const [routeModalOpen, setRouteModalOpen] = useState(false);
 
   const handleRemove = useCatch(async (removed) => {
     if (removed) {
@@ -171,37 +182,45 @@ const StatusCard = ({ deviceId, position, onClose, disableActions, desktopPaddin
     }
   }, [navigate, position]);
 
+  const handleClose = () => {
+    // Elimina la ruta del mapa si existe
+    if (map) {
+      if (map.getSource('route')) {
+        if (map.getLayer('route')) {
+          map.removeLayer('route');
+        }
+        map.removeSource('route');
+      }
+  
+      // Elimina el marcador del punto final si existe
+      if (map.getSource('route-end')) {
+        if (map.getLayer('route-end')) {
+          map.removeLayer('route-end');
+        }
+        map.removeSource('route-end');
+      }
+    }
+    onClose();
+  };
+  
+
+
   return (
     <>
       <div className={classes.root}>
         {device && (
-          <Draggable
-            handle={`.${classes.media}, .${classes.header}`}
-          >
+          <Draggable handle={`.${classes.media}, .${classes.header}`}>
             <Card elevation={3} className={classes.card}>
               {deviceImage ? (
-                <CardMedia
-                  className={classes.media}
-                  image={`/api/media/${device.uniqueId}/${deviceImage}`}
-                >
-                  <IconButton
-                    size="small"
-                    onClick={onClose}
-                    onTouchStart={onClose}
-                  >
-                    <CloseIcon fontSize="small" className={classes.mediaButton} />
+                <CardMedia className={classes.media} image={`/api/media/${device.uniqueId}/${deviceImage}`}>
+                  <IconButton size="small" onClick={handleClose} onTouchStart={handleClose}>
+                    <CloseIcon fontSize="small" />
                   </IconButton>
                 </CardMedia>
               ) : (
                 <div className={classes.header}>
-                  <Typography variant="body2" color="textSecondary">
-                    {device.name}
-                  </Typography>
-                  <IconButton
-                    size="small"
-                    onClick={onClose}
-                    onTouchStart={onClose}
-                  >
+                  <Typography variant="body2" color="textSecondary">{device.name}</Typography>
+                  <IconButton size="small" onClick={handleClose} onTouchStart={handleClose}>
                     <CloseIcon fontSize="small" />
                   </IconButton>
                 </div>
@@ -214,13 +233,7 @@ const StatusCard = ({ deviceId, position, onClose, disableActions, desktopPaddin
                         <StatusRow
                           key={key}
                           name={positionAttributes[key]?.name || key}
-                          content={(
-                            <PositionValue
-                              position={position}
-                              property={position.hasOwnProperty(key) ? key : null}
-                              attribute={position.hasOwnProperty(key) ? null : key}
-                            />
-                          )}
+                          content={<PositionValue position={position} property={position.hasOwnProperty(key) ? key : null} attribute={position.hasOwnProperty(key) ? null : key} />}
                         />
                       ))}
                     </TableBody>
@@ -228,37 +241,26 @@ const StatusCard = ({ deviceId, position, onClose, disableActions, desktopPaddin
                 </CardContent>
               )}
               <CardActions classes={{ root: classes.actions }} disableSpacing>
-                <IconButton
-                  color="secondary"
-                  onClick={(e) => setAnchorEl(e.currentTarget)}
-                  disabled={!position}
-                >
+                <IconButton color="secondary" onClick={(e) => setAnchorEl(e.currentTarget)} disabled={!position}>
                   <PendingIcon />
                 </IconButton>
-                <IconButton
-                  onClick={() => navigate('/replay')}
-                  disabled={disableActions || !position}
-                >
+                <IconButton onClick={() => navigate('/replay')} disabled={disableActions || !position}>
                   <ReplayIcon />
                 </IconButton>
-                <IconButton
-                  onClick={() => navigate(`/settings/device/${deviceId}/command`)}
-                  disabled={disableActions}
-                >
+                <IconButton onClick={() => navigate(`/settings/device/${deviceId}/command`)} disabled={disableActions}>
                   <PublishIcon />
                 </IconButton>
-                <IconButton
-                  onClick={() => navigate(`/settings/device/${deviceId}`)}
-                  disabled={disableActions || deviceReadonly}
-                >
+                <IconButton onClick={() => navigate(`/settings/device/${deviceId}`)} disabled={disableActions || deviceReadonly}>
                   <EditIcon />
                 </IconButton>
-                <IconButton
-                  onClick={() => setRemoving(true)}
-                  disabled={disableActions || deviceReadonly}
-                  className={classes.delete}
-                >
+                <IconButton onClick={() => setRemoving(true)} disabled={disableActions || deviceReadonly} className={classes.delete}>
                   <DeleteIcon />
+                </IconButton>
+                <IconButton
+                  onClick={() => setRouteModalOpen(true)}
+                  disabled={disableActions || !position || !map}
+                >
+                  <DirectionsIcon />
                 </IconButton>
               </CardActions>
             </Card>
@@ -275,12 +277,15 @@ const StatusCard = ({ deviceId, position, onClose, disableActions, desktopPaddin
           {!shareDisabled && !user.temporary && <MenuItem onClick={() => navigate(`/settings/device/${deviceId}/share`)}>{t('deviceShare')}</MenuItem>}
         </Menu>
       )}
-      <RemoveDialog
-        open={removing}
-        endpoint="devices"
-        itemId={deviceId}
-        onResult={(removed) => handleRemove(removed)}
-      />
+      <RemoveDialog open={removing} endpoint="devices" itemId={deviceId} onResult={(removed) => handleRemove(removed)} />
+      { routeModalOpen && (
+        <CalculateRouteModal
+          open={routeModalOpen}
+          onClose={() => setRouteModalOpen(false)}
+          devicePosition={position}
+          map={map}
+        />
+      )}
     </>
   );
 };

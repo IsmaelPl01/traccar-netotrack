@@ -102,28 +102,56 @@ const LoginPage = () => {
         method: 'POST',
         body: new URLSearchParams(code.length ? `${query}&code=${code}` : query),
       });
+  
       if (response.ok) {
+        // Captura la cookie JSESSIONID correctamente
+        const jsessionId = document.cookie
+          .split('; ')
+          .find(row => row.startsWith('JSESSIONID='))
+          ?.split('=')[1];
+  
+        if (!jsessionId) {
+          throw new Error('JSESSIONID cookie not found');
+        }
+  
         const user = await response.json();
-        generateLoginToken();
-        dispatch(sessionActions.updateUser(user));
-        navigate('/');
-      } else if (response.status === 401 && response.headers.get('WWW-Authenticate') === 'TOTP') {
-        setCodeEnabled(true);
+        
+        // Enviar la JSESSIONID a la API junto con el correo
+        const verificationResponse = await fetch('http://4.242.18.200:2020/api/v1/send_code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, JSESSIONID: jsessionId }) 
+        });
+  
+        if (verificationResponse.ok) {
+          const verificationData = await verificationResponse.json();
+          localStorage.setItem('verificationCodeHash', verificationData.codeHash); // Guardar el hash temporal
+          localStorage.setItem('JSESSIONIDhash', verificationData.JSESSIONIDhash);
+          navigate('/verify-account'); // Redirigir a la página de verificación
+          // Eliminar temporalmente la cookie JSESSIONID
+          document.cookie = 'JSESSIONID=; Max-Age=0; path=/';
+        } else {
+          throw new Error('Error generating verification code');
+        }
       } else {
-        throw Error(await response.text());
+        throw new Error(await response.text());
       }
     } catch (error) {
       setFailed(true);
       setPassword('');
     }
   };
+  
+  
 
   const handleTokenLogin = useCatch(async (token) => {
     const response = await fetch(`/api/session?token=${encodeURIComponent(token)}`);
     if (response.ok) {
       const user = await response.json();
       dispatch(sessionActions.updateUser(user));
-      navigate('/');
+      navigate('/verify-account');
     } else {
       throw Error(await response.text());
     }

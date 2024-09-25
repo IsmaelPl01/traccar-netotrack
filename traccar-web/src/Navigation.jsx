@@ -58,6 +58,7 @@ import LogsPage from './reports/LogsPage';
 import SharePage from './settings/SharePage';
 import AnnouncementPage from './settings/AnnouncementPage';
 import EmulatorPage from './other/EmulatorPage';
+import VerifyAccountPage from './login/VerifyAccountPage';
 
 const Navigation = () => {
   const navigate = useNavigate();
@@ -102,6 +103,7 @@ const Navigation = () => {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/change-server" element={<ChangeServerPage />} />
+      <Route path="/verify-account" element={<VerifyAccountPage />} />
       <Route path="/" element={<App />}>
         <Route index element={<MainPage />} />
 
